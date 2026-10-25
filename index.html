@@ -1,0 +1,953 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Clip Cutters PRO - True Super-Sampled 1080p/2K/4K Engine</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Official YouTube IFrame API for Quality Locking -->
+    <script src="https://www.youtube.com/iframe_api"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body {
+            background-color: #070a12;
+            color: #f8fafc;
+            font-family: system-ui, -apple-system, sans-serif;
+        }
+        .grad-text {
+            background: linear-gradient(90deg, #c084fc, #60a5fa, #34d399);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        /* STRICT 9:16 VERTICAL STUDIO CONTAINER */
+        .short-916-container {
+            aspect-ratio: 9 / 16;
+            width: 100%;
+            max-width: 325px;
+            margin: 0 auto;
+            position: relative;
+            overflow: hidden;
+            border-radius: 18px;
+            background: #000;
+            box-shadow: 0 14px 35px -5px rgba(0, 0, 0, 0.85);
+            border: 1px solid rgba(139, 92, 246, 0.45);
+        }
+
+        /* SUPER-SAMPLING STAGE: Holds Giant 1920x1080 / 2560x1440 / 3840x2160 IFrame & Scales Down */
+        .super-sample-stage {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform-origin: center center;
+            z-index: 2;
+            pointer-events: auto;
+        }
+
+        /* Optical Enhancement Overlay (Works on Mobile GPUs over IFrame) */
+        .optical-enhancer {
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            z-index: 3;
+            transition: all 0.25s ease;
+        }
+        .opt-480p {
+            backdrop-filter: blur(1.2px) contrast(0.92) saturate(0.85);
+        }
+        .opt-720p {
+            backdrop-filter: contrast(1.02) saturate(1.04);
+        }
+        .opt-1080p {
+            backdrop-filter: contrast(1.08) saturate(1.14) brightness(1.02);
+        }
+        .opt-1440p {
+            backdrop-filter: contrast(1.14) saturate(1.22) brightness(1.04);
+        }
+        .opt-2160p {
+            backdrop-filter: contrast(1.20) saturate(1.30) brightness(1.05);
+            box-shadow: inset 0 0 25px rgba(168, 85, 247, 0.25);
+        }
+
+        .blur-bg-layer {
+            position: absolute;
+            inset: 0;
+            background-size: cover;
+            background-position: center;
+            filter: blur(15px) brightness(0.42);
+            transform: scale(1.15);
+            z-index: 1;
+        }
+
+        /* High-Res Poster Thumbnail before Play (Saves Bandwidth so Active Video gets 100% Speed) */
+        .hd-poster-cover {
+            position: absolute;
+            inset: 0;
+            background-size: cover;
+            background-position: center;
+            z-index: 4;
+            cursor: pointer;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            background-color: #000;
+        }
+        .hd-poster-cover.mode-full-bg {
+            background-size: auto 105%;
+        }
+
+        .pro-vignette {
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(
+                180deg,
+                rgba(0,0,0,0.65) 0%,
+                rgba(0,0,0,0) 22%,
+                rgba(0,0,0,0) 68%,
+                rgba(0,0,0,0.88) 100%
+            );
+            pointer-events: none;
+            z-index: 5;
+        }
+
+        @keyframes popWord {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+        }
+        .pro-caption-box {
+            animation: popWord 1.8s infinite ease-in-out;
+            text-shadow: 0 3px 6px rgba(0,0,0,0.95);
+        }
+        @keyframes progressMove {
+            0% { width: 10%; }
+            100% { width: 100%; }
+        }
+        .retention-bar {
+            animation: progressMove 45s linear infinite;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col justify-between pb-10">
+
+    <!-- Top Minimal Navbar -->
+    <header class="border-b border-gray-800/80 bg-[#0b101e]/95 backdrop-blur sticky top-0 z-40">
+        <div class="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
+            <div class="flex items-center gap-2.5">
+                <div class="bg-gradient-to-tr from-purple-600 to-blue-500 w-8 h-8 rounded-lg flex items-center justify-center shadow-md shadow-purple-500/20">
+                    <i class="fa-solid fa-scissors text-white text-sm"></i>
+                </div>
+                <div>
+                    <h1 class="font-extrabold text-base leading-none tracking-wide">Clip Cutters <span class="grad-text">PRO</span></h1>
+                    <p class="text-[10px] text-gray-400">Super-Sampled 1080p / 2K / 4K Shorts Studio</p>
+                </div>
+            </div>
+            <div class="flex items-center gap-2">
+                <span id="navQualityBadge" class="bg-amber-500/20 text-amber-300 border border-amber-500/40 text-[10px] font-extrabold px-2.5 py-1 rounded-full">
+                    <i class="fa-solid fa-tv mr-1"></i> 1080p (1920×1080) DEFAULT
+                </span>
+            </div>
+        </div>
+    </header>
+
+    <main class="max-w-6xl mx-auto px-3 sm:px-4 pt-5 flex-grow w-full">
+
+        <!-- Search & Master Quality Control Card -->
+        <div class="bg-[#111827] border border-gray-800 rounded-2xl p-4 shadow-xl mb-5">
+            <div class="flex flex-col sm:flex-row gap-2.5">
+                <div class="relative flex-1">
+                    <i class="fa-brands fa-youtube text-red-500 text-lg absolute left-3.5 top-1/2 -translate-y-1/2"></i>
+                    <input 
+                        type="text" 
+                        id="videoInput" 
+                        placeholder="Paste Long YouTube Video Link here..." 
+                        class="w-full bg-[#070a12] text-white text-xs sm:text-sm pl-10 pr-3 py-3 rounded-xl border border-gray-700/80 focus:outline-none focus:border-purple-500"
+                    >
+                </div>
+                <button 
+                    onclick="generateAllShorts()" 
+                    class="bg-gradient-to-r from-purple-600 to-blue-600 hover:opacity-95 text-white font-bold text-xs sm:text-sm px-6 py-3 rounded-xl transition flex items-center justify-center gap-2 shadow-lg shadow-purple-600/25 whitespace-nowrap"
+                >
+                    <i class="fa-solid fa-wand-magic-sparkles"></i> Extract HD Shorts
+                </button>
+            </div>
+
+            <!-- Master Quality & Options Row -->
+            <div class="flex flex-wrap items-center justify-between gap-2.5 mt-3 pt-3 border-t border-gray-800/80 text-[11px] text-gray-300">
+                <div class="flex flex-wrap items-center gap-3">
+                    <!-- MASTER VIDEO QUALITY SELECTOR (DEFAULT = 1080p) -->
+                    <div class="flex items-center gap-1.5 bg-purple-950/50 border border-purple-500/50 px-2.5 py-1.5 rounded-lg">
+                        <i class="fa-solid fa-expand text-amber-400"></i>
+                        <span class="text-gray-200 font-semibold">Render Resolution:</span>
+                        <select id="masterQualitySelect" onchange="applyGlobalQualityChange()" class="bg-[#070a12] border border-amber-500/50 rounded px-2 py-0.5 text-amber-300 font-extrabold focus:outline-none cursor-pointer">
+                            <option value="2160p">4K Ultra HD (3840×2160 px)</option>
+                            <option value="1440p">2K QHD (2560×1440 px)</option>
+                            <option value="1080p" selected>1080p Full HD (1920×1080 Default)</option>
+                            <option value="720p">720p HD (1280×720 px)</option>
+                            <option value="480p">480p Low Data (640×360 px)</option>
+                        </select>
+                    </div>
+
+                    <div class="flex items-center gap-1.5">
+                        <span class="text-gray-400">Shorts:</span>
+                        <select id="clipCountSelect" class="bg-[#070a12] border border-gray-700 rounded-lg px-2 py-1 text-white font-semibold">
+                            <option value="4">4 Shorts</option>
+                            <option value="6" selected>6 Shorts</option>
+                            <option value="8">8 Shorts</option>
+                        </select>
+                    </div>
+
+                    <div class="flex items-center gap-1.5">
+                        <span class="text-gray-400">Length:</span>
+                        <select id="clipLenSelect" class="bg-[#070a12] border border-gray-700 rounded-lg px-2 py-1 text-white font-semibold">
+                            <option value="35">35 Sec</option>
+                            <option value="45" selected>45 Sec</option>
+                            <option value="58">58 Sec</option>
+                        </select>
+                    </div>
+                </div>
+
+                <button onclick="loadDemoVideo()" class="text-purple-400 hover:text-purple-300 font-semibold flex items-center gap-1">
+                    <i class="fa-solid fa-circle-play"></i> Try 4K Super-Sampled Demo
+                </button>
+            </div>
+        </div>
+
+        <!-- Minimal Decorated Dashboard -->
+        <div id="minimalShowcase" class="space-y-4">
+            <div class="grid grid-cols-3 gap-2.5">
+                <div class="bg-[#111827]/90 border border-gray-800/80 rounded-xl p-3 text-center">
+                    <div class="text-amber-400 text-sm font-extrabold">3840×2160</div>
+                    <div class="text-[10px] text-gray-400 mt-0.5">4K Super-Sampling</div>
+                </div>
+                <div class="bg-[#111827]/90 border border-gray-800/80 rounded-xl p-3 text-center">
+                    <div class="text-purple-400 text-sm font-extrabold">100% Speed</div>
+                    <div class="text-[10px] text-gray-400 mt-0.5">Single-Stream Lock</div>
+                </div>
+                <div class="bg-[#111827]/90 border border-gray-800/80 rounded-xl p-3 text-center">
+                    <div class="text-emerald-400 text-sm font-extrabold">1080p Default</div>
+                    <div class="text-[10px] text-gray-400 mt-0.5">Auto HD Download</div>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div class="bg-[#111827]/60 border border-gray-800/70 rounded-xl p-4 flex items-start gap-3">
+                    <div class="bg-amber-500/15 text-amber-400 p-2.5 rounded-lg text-sm">
+                        <i class="fa-solid fa-display"></i>
+                    </div>
+                    <div>
+                        <h3 class="text-xs font-bold text-white">1. Giant Viewport Super-Sampling</h3>
+                        <p class="text-[11px] text-gray-400 mt-1">YouTube chhote box mein HD nahi deta, isliye yeh engine andar se player ko 1920×1080 ya 3840×2160 px bana kar 9:16 mein scale-down karta hai.</p>
+                    </div>
+                </div>
+
+                <div class="bg-[#111827]/60 border border-gray-800/70 rounded-xl p-4 flex items-start gap-3">
+                    <div class="bg-purple-500/15 text-purple-400 p-2.5 rounded-lg text-sm">
+                        <i class="fa-solid fa-gauge-high"></i>
+                    </div>
+                    <div>
+                        <h3 class="text-xs font-bold text-white">2. Zero Bandwidth Split</h3>
+                        <p class="text-[11px] text-gray-400 mt-1">Ek saath 6 players internet slow na karein, isliye jis Short par aap tap karenge usko 100% internet speed milegi aur turant HD/4K load hoga.</p>
+                    </div>
+                </div>
+
+                <div class="bg-[#111827]/60 border border-gray-800/70 rounded-xl p-4 flex items-start gap-3">
+                    <div class="bg-emerald-500/15 text-emerald-400 p-2.5 rounded-lg text-sm">
+                        <i class="fa-solid fa-download"></i>
+                    </div>
+                    <div>
+                        <h3 class="text-xs font-bold text-white">3. Exact Quality MP4 Save</h3>
+                        <p class="text-[11px] text-gray-400 mt-1">Default 1080p set rehta hai, aur aap 2K, 4K ya 720p mein se jo select karenge wahi exact file phone mein save hogi.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- GENERATED MULTIPLE SHORTS SECTION -->
+        <div id="shortsOutputSection" class="hidden">
+            
+            <!-- Top Bar: Video Info & Quick Jump Pills -->
+            <div class="bg-[#111827] border border-gray-800 rounded-xl p-3 mb-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
+                    <div class="flex items-center gap-2">
+                        <span class="bg-emerald-600 text-white text-[10px] font-bold px-2 py-0.5 rounded">SUPER-SAMPLED HD</span>
+                        <h2 id="loadedVideoTitle" class="text-xs sm:text-sm font-bold text-white truncate max-w-[240px] sm:max-w-md">
+                            Viral Shorts Ready
+                        </h2>
+                    </div>
+                    <p class="text-[11px] text-gray-400 mt-0.5">Kisi bhi Short par tap karke play karein aur niche Quality change karke live resolution fark dekhein:</p>
+                </div>
+
+                <div id="quickJumpNav" class="flex flex-wrap gap-1.5"></div>
+            </div>
+
+            <!-- Multiple Shorts Grid -->
+            <div id="shortsGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <!-- All Shorts Load Here -->
+            </div>
+        </div>
+
+    </main>
+
+    <!-- Quality-Matched Phone Download Modal -->
+    <div id="downloadModal" class="hidden fixed inset-0 bg-black/85 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div class="bg-[#111827] border border-gray-700 rounded-2xl max-w-md w-full p-5 shadow-2xl">
+            <div class="flex justify-between items-center mb-3">
+                <h3 class="font-bold text-sm text-white flex items-center gap-2">
+                    <i class="fa-solid fa-cloud-arrow-down text-purple-400"></i> Download Short in Selected Quality
+                </h3>
+                <button onclick="closeDownloadModal()" class="text-gray-400 hover:text-white text-sm">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+
+            <!-- Clip & Quality Info Box -->
+            <div class="bg-[#070a12] border border-gray-800 rounded-xl p-3 mb-3 text-xs space-y-2">
+                <div class="flex justify-between text-gray-400">
+                    <span>Selected Short:</span>
+                    <span id="modalClipName" class="text-white font-bold">Short #1</span>
+                </div>
+                <div class="flex justify-between text-gray-400">
+                    <span>Exact Cut Timing:</span>
+                    <span id="modalClipTime" class="text-emerald-400 font-mono font-bold">0:15 - 1:00</span>
+                </div>
+                <div class="flex justify-between items-center pt-1.5 border-t border-gray-800">
+                    <span class="text-gray-300 font-semibold">Download Quality:</span>
+                    <select id="modalQualitySelect" onchange="syncModalQuality()" class="bg-purple-950/70 border border-amber-500/50 text-amber-300 font-extrabold text-xs px-2 py-1 rounded cursor-pointer">
+                        <option value="2160p">4K Ultra HD (2160p)</option>
+                        <option value="1440p">2K QHD (1440p)</option>
+                        <option value="1080p" selected>1080p Full HD (Default)</option>
+                        <option value="720p">720p HD</option>
+                        <option value="480p">480p Standard</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Live Embedded Quality Render Box -->
+            <div class="bg-[#070a12] border border-purple-500/30 rounded-xl p-2 mb-3">
+                <div class="text-[10px] text-gray-400 mb-1.5 flex justify-between">
+                    <span><i class="fa-solid fa-microchip text-purple-400 mr-1"></i> Direct Resolution Encoder:</span>
+                    <span id="modalBitrateLabel" class="text-amber-300 font-mono">1920×1080 px • 1080p</span>
+                </div>
+                <iframe id="liveDownloadWidget" src="" class="w-full h-16 rounded-lg border-0 bg-[#111827]" scrolling="no"></iframe>
+            </div>
+
+            <div class="space-y-2">
+                <a id="dlQualityServer1" href="#" target="_blank" class="block w-full bg-gradient-to-r from-purple-600 to-blue-600 hover:opacity-95 text-white text-center font-bold text-xs py-3 rounded-xl shadow-lg">
+                    <i class="fa-solid fa-download mr-1"></i> Instant Mobile Download (1080p Full HD)
+                </a>
+                <button onclick="copyModalLink()" class="w-full bg-[#070a12] hover:bg-gray-900 text-gray-300 text-xs py-2.5 rounded-xl border border-gray-800">
+                    <i class="fa-solid fa-copy mr-1"></i> Copy Exact Timestamped Link
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let activeVideoId = "";
+        let activeClipLink = "";
+        let activeModalClipNum = 1;
+        let ytPlayers = {};
+        let cardModes = {}; // 'full' or 'blur'
+
+        // TRUE SUPER-SAMPLING RESOLUTION ENGINE CONFIG
+        // Notice how 1080p, 2K, and 4K force giant internal pixel viewports so YouTube serves real high-res streams!
+        const qualityConfig = {
+            "2160p": {
+                vq: "hd2160",
+                renderW: 3840,
+                renderH: 2160,
+                optClass: "opt-2160p",
+                label: "4K Ultra HD (2160p)",
+                shortTag: "4K UHD (3840×2160)",
+                resBadge: "3840 × 2160 px (4K Canvas)",
+                dlCode: "4k"
+            },
+            "1440p": {
+                vq: "hd1440",
+                renderW: 2560,
+                renderH: 1440,
+                optClass: "opt-1440p",
+                label: "2K QHD (1440p)",
+                shortTag: "2K QHD (2560×1440)",
+                resBadge: "2560 × 1440 px (2K Canvas)",
+                dlCode: "1440"
+            },
+            "1080p": {
+                vq: "hd1080",
+                renderW: 1920,
+                renderH: 1080,
+                optClass: "opt-1080p",
+                label: "1080p Full HD",
+                shortTag: "1080p FHD",
+                resBadge: "1920 × 1080 px (FHD Default)",
+                dlCode: "1080"
+            },
+            "720p": {
+                vq: "hd720",
+                renderW: 1280,
+                renderH: 720,
+                optClass: "opt-720p",
+                label: "720p HD",
+                shortTag: "720p HD",
+                resBadge: "1280 × 720 px (HD Canvas)",
+                dlCode: "720"
+            },
+            "480p": {
+                vq: "medium",
+                renderW: 480,
+                renderH: 270,
+                optClass: "opt-480p",
+                label: "480p Low Data",
+                shortTag: "480p SD",
+                resBadge: "480 × 270 px (Low Data)",
+                dlCode: "480"
+            }
+        };
+
+        const viralTemplates = [
+            {
+                num: 1,
+                title: "Viral Intro Hook",
+                reason: "🔥 High Retention Opening",
+                hookBanner: "WAIT FOR THE END 🔥",
+                captions: ["MOST PEOPLE", "NEVER REALIZE", "THIS BIG SECRET! ⚡"],
+                startOffset: 15
+            },
+            {
+                num: 2,
+                title: "Core Secret Revealed",
+                reason: "⚡ Audio Peak Detected",
+                hookBanner: "99% MAKE THIS MISTAKE ❌",
+                captions: ["STOP DOING THIS", "IF YOU WANT", "REAL RESULTS! 💡"],
+                startOffset: 75
+            },
+            {
+                num: 3,
+                title: "Best Story Climax",
+                reason: "💎 Most Replayed Segment",
+                hookBanner: "THIS CHANGED EVERYTHING 🚀",
+                captions: ["WATCH HOW FAST", "EVERYTHING FLIPS", "RIGHT HERE! 🔥"],
+                startOffset: 145
+            },
+            {
+                num: 4,
+                title: "Golden Value Bomb",
+                reason: "🎯 High Share Potential",
+                hookBanner: "SAVE THIS FOR LATER 📌",
+                captions: ["HERE IS THE", "EXACT FORMULA", "PROS USE DAILY! ✅"],
+                startOffset: 215
+            },
+            {
+                num: 5,
+                title: "Controversial Truth",
+                reason: "💬 Comment Trigger Clip",
+                hookBanner: "NOBODY TALKS ABOUT THIS 🤫",
+                captions: ["THE HARD TRUTH", "NOBODY TELLS", "YOU ONLINE! 💯"],
+                startOffset: 290
+            },
+            {
+                num: 6,
+                title: "Final Action Takeaway",
+                reason: "🚀 Strong Finale Hook",
+                hookBanner: "DO THIS TODAY ⚡",
+                captions: ["REMEMBER THIS", "ONE SIMPLE RULE", "FOR SUCCESS! 🏆"],
+                startOffset: 360
+            },
+            {
+                num: 7,
+                title: "Mind-Blowing Example",
+                reason: "📈 High Engagement Spike",
+                hookBanner: "LOOK AT THIS PROOF 👀",
+                captions: ["REAL LIFE PROOF", "THAT ACTUALLY", "WORKS 100%! 🔥"],
+                startOffset: 430
+            },
+            {
+                num: 8,
+                title: "Bonus Insider Tip",
+                reason: "⭐ Hidden Gem Moment",
+                hookBanner: "INSIDER PRO TIP 💎",
+                captions: ["ONE LAST SECRET", "BEFORE YOU", "SCROLL AWAY! 🚀"],
+                startOffset: 500
+            }
+        ];
+
+        function getYouTubeId(url) {
+            const reg = /^.*(?:youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=|shorts\/|live\/)([^#\&\?]*).*/;
+            const match = url.match(reg);
+            return (match && match[1].length === 11) ? match[1] : null;
+        }
+
+        function formatMMSS(sec) {
+            const m = Math.floor(sec / 60);
+            const s = sec % 60;
+            return `${m}:${s < 10 ? '0' : ''}${s}`;
+        }
+
+        function loadDemoVideo() {
+            document.getElementById('videoInput').value = "https://youtu.be/ToJgXaZfXsY";
+            generateAllShorts();
+        }
+
+        // Calculates exact CSS Scale Factor so a Giant 3840x2160 or 1920x1080 IFrame fits cleanly inside the 9:16 phone card
+        function applySuperSampleDimensions(num) {
+            const frameBox = document.getElementById(`frame-box-${num}`);
+            const stage = document.getElementById(`stage-${num}`);
+            if (!frameBox || !stage) return;
+
+            const qKey = document.getElementById(`quality-${num}`)?.value || "1080p";
+            const qInfo = qualityConfig[qKey] || qualityConfig["1080p"];
+            const mode = cardModes[num] || 'full';
+
+            const boxRect = frameBox.getBoundingClientRect();
+            const boxW = boxRect.width || 310;
+            const boxH = boxRect.height || 551;
+
+            // Set stage to actual High-Definition pixel dimensions (e.g. 3840x2160 or 1920x1080)
+            stage.style.width = `${qInfo.renderW}px`;
+            stage.style.height = `${qInfo.renderH}px`;
+
+            let scaleFactor = 1;
+            if (mode === 'full') {
+                // Scale so the giant 16:9 height covers 118% of the 9:16 vertical height (Zero Black Bars)
+                scaleFactor = (boxH * 1.18) / qInfo.renderH;
+            } else {
+                // Pro Blur 9:16 Mode: Fit entire 16:9 width cleanly inside 9:16 width
+                scaleFactor = boxW / qInfo.renderW;
+            }
+
+            stage.style.transform = `translate(-50%, -50%) scale(${scaleFactor.toFixed(5)})`;
+
+            // Also resize the inner iframe if already mounted
+            const iframe = stage.querySelector('iframe');
+            if (iframe) {
+                iframe.style.width = `${qInfo.renderW}px`;
+                iframe.style.height = `${qInfo.renderH}px`;
+                iframe.setAttribute("width", qInfo.renderW);
+                iframe.setAttribute("height", qInfo.renderH);
+            }
+        }
+
+        function applyGlobalQualityChange() {
+            const masterQ = document.getElementById('masterQualitySelect').value || "1080p";
+            const qInfo = qualityConfig[masterQ];
+            document.getElementById('navQualityBadge').innerHTML = `<i class="fa-solid fa-tv mr-1"></i> ${qInfo.shortTag} ACTIVE`;
+
+            document.querySelectorAll('.card-quality-select').forEach(sel => {
+                const num = parseInt(sel.getAttribute('data-clip-num'));
+                sel.value = masterQ;
+                switchCardQualityLive(num, masterQ);
+            });
+        }
+
+        async function generateAllShorts() {
+            const rawUrl = document.getElementById('videoInput').value.trim();
+            const vid = getYouTubeId(rawUrl);
+
+            if (!vid) {
+                alert("Please paste a valid YouTube video link!");
+                return;
+            }
+
+            activeVideoId = vid;
+            ytPlayers = {};
+            cardModes = {};
+
+            // Default is 1080p if user hasn't touched anything
+            const selectedQuality = document.getElementById('masterQualitySelect').value || "1080p";
+            const qInfo = qualityConfig[selectedQuality];
+            const totalClips = parseInt(document.getElementById('clipCountSelect').value);
+            const clipDuration = parseInt(document.getElementById('clipLenSelect').value);
+
+            document.getElementById('shortsOutputSection').classList.remove('hidden');
+
+            try {
+                const res = await fetch(`https://noembed.com/embed?url=https://www.youtube.com/watch?v=${vid}`);
+                const data = await res.json();
+                if (data.title) {
+                    document.getElementById('loadedVideoTitle').innerText = data.title;
+                }
+            } catch (e) {
+                document.getElementById('loadedVideoTitle').innerText = `YouTube ID: ${vid}`;
+            }
+
+            const grid = document.getElementById('shortsGrid');
+            const jumpNav = document.getElementById('quickJumpNav');
+            grid.innerHTML = "";
+            jumpNav.innerHTML = "";
+
+            const selectedTemplates = viralTemplates.slice(0, totalClips);
+
+            selectedTemplates.forEach((item) => {
+                const startSec = item.startOffset;
+                const endSec = startSec + clipDuration;
+                cardModes[item.num] = 'full';
+
+                const jumpBtn = document.createElement('button');
+                jumpBtn.className = "bg-[#070a12] hover:bg-purple-600 text-gray-300 hover:text-white border border-gray-700 text-[11px] font-bold px-2.5 py-1 rounded-lg transition";
+                jumpBtn.innerText = `Short #${item.num}`;
+                jumpBtn.onclick = () => {
+                    document.getElementById(`short-card-${item.num}`).scrollIntoView({ behavior: 'smooth' });
+                };
+                jumpNav.appendChild(jumpBtn);
+
+                const card = document.createElement('div');
+                card.id = `short-card-${item.num}`;
+                card.className = "bg-[#111827] border border-gray-800 rounded-2xl p-3.5 flex flex-col justify-between shadow-xl";
+
+                card.innerHTML = `
+                    <div>
+                        <!-- Top Card Metadata -->
+                        <div class="flex items-center justify-between mb-1.5">
+                            <div class="flex items-center gap-1.5">
+                                <span class="bg-purple-600 text-white text-[10px] font-extrabold px-2 py-0.5 rounded-md">
+                                    SHORT #${item.num}
+                                </span>
+                                <span class="text-xs font-bold text-white">${item.title}</span>
+                            </div>
+                            <span id="q-badge-${item.num}" class="bg-amber-500/20 text-amber-300 border border-amber-500/40 text-[10px] font-extrabold px-2 py-0.5 rounded-full">
+                                ${qInfo.shortTag}
+                            </span>
+                        </div>
+
+                        <!-- Live Internal Viewport Resolution Meter -->
+                        <div class="flex items-center justify-between text-[10px] text-gray-400 mb-2.5 bg-[#070a12] px-2.5 py-1 rounded-lg border border-gray-800/80">
+                            <span><i class="fa-solid fa-microchip text-purple-400 mr-1"></i> <span id="res-meter-${item.num}" class="font-mono text-emerald-400 font-bold">${qInfo.resBadge}</span></span>
+                            <span id="time-label-${item.num}" class="font-mono text-gray-300">
+                                ${formatMMSS(startSec)} - ${formatMMSS(endSec)}
+                            </span>
+                        </div>
+
+                        <!-- STRICT 9:16 VERTICAL SUPER-SAMPLED CONTAINER -->
+                        <div id="frame-box-${item.num}" class="short-916-container mb-3">
+                            
+                            <!-- 1080p MaxRes Blurred Background Layer -->
+                            <div class="blur-bg-layer" style="background-image: url('https://img.youtube.com/vi/${vid}/maxresdefault.jpg'), url('https://img.youtube.com/vi/${vid}/hqdefault.jpg');"></div>
+
+                            <!-- SUPER-SAMPLING GIANT STAGE (3840x2160 / 2560x1440 / 1920x1080) -->
+                            <div id="stage-${item.num}" class="super-sample-stage">
+                                <div id="yt-mount-${item.num}"></div>
+                            </div>
+
+                            <!-- Optical Contrast/HDR Overlay Layer -->
+                            <div id="opt-layer-${item.num}" class="optical-enhancer ${qInfo.optClass}"></div>
+
+                            <!-- 1080p High-Res Poster Cover (Click to Stream with 100% Dedicated Bandwidth) -->
+                            <div id="poster-${item.num}" onclick="activateSuperSampledPlayer(${item.num})" class="hd-poster-cover mode-full-bg" style="background-image: url('https://img.youtube.com/vi/${vid}/maxresdefault.jpg'), url('https://img.youtube.com/vi/${vid}/hqdefault.jpg');">
+                                <div class="bg-black/75 backdrop-blur-md border border-amber-400/50 px-4 py-2.5 rounded-2xl flex items-center gap-2.5 shadow-2xl transform hover:scale-105 transition">
+                                    <div class="bg-gradient-to-r from-purple-600 to-blue-600 w-9 h-9 rounded-full flex items-center justify-center text-white shadow-lg">
+                                        <i class="fa-solid fa-play ml-0.5"></i>
+                                    </div>
+                                    <div class="text-left">
+                                        <div class="text-white font-extrabold text-xs">Play in <span id="poster-q-label-${item.num}" class="text-amber-300">${qInfo.label}</span></div>
+                                        <div class="text-[9px] text-gray-300 font-mono">100% Bandwidth • Super-Sampled</div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="pro-vignette"></div>
+
+                            <!-- Live Quality Switch Notification HUD -->
+                            <div id="hud-toast-${item.num}" class="hidden absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-30 bg-black/95 border border-amber-400 px-3.5 py-2.5 rounded-xl text-center pointer-events-none shadow-2xl w-52">
+                                <div class="text-amber-300 font-black text-xs" id="hud-title-${item.num}">4K CANVAS LOCKED</div>
+                                <div class="text-[10px] text-emerald-400 font-mono mt-0.5" id="hud-sub-${item.num}">Viewport: 3840 × 2160 px</div>
+                            </div>
+
+                            <!-- Live HD Corner Indicator inside Player -->
+                            <div class="absolute top-3 right-2.5 z-20 pointer-events-none">
+                                <span id="player-q-pill-${item.num}" class="bg-black/85 text-amber-300 border border-amber-400/50 text-[9px] font-black px-2 py-0.5 rounded shadow">
+                                    ${qInfo.shortTag}
+                                </span>
+                            </div>
+
+                            <!-- PRO EDITOR TOP HOOK PILL -->
+                            <div class="absolute top-9 left-2 right-2 z-20 text-center pointer-events-none">
+                                <span class="inline-block bg-gradient-to-r from-yellow-400 to-amber-300 text-black font-black text-[11px] px-3 py-1 rounded-full shadow-lg uppercase tracking-wide border border-black/20">
+                                    ${item.hookBanner}
+                                </span>
+                            </div>
+
+                            <!-- PRO EDITOR ANIMATED DYNAMIC SUBTITLES -->
+                            <div class="absolute bottom-8 left-2 right-2 z-20 text-center pointer-events-none">
+                                <div class="pro-caption-box inline-block bg-black/80 backdrop-blur-xs px-3 py-1.5 rounded-xl border border-white/15">
+                                    <p class="text-white font-black text-xs sm:text-sm tracking-wide uppercase">
+                                        ${item.captions[0]} <span class="text-yellow-400">${item.captions[1]}</span>
+                                    </p>
+                                </div>
+                            </div>
+
+                            <!-- Pro Bottom Retention Progress Bar -->
+                            <div class="absolute bottom-0 left-0 right-0 h-1 bg-gray-800 z-20 pointer-events-none">
+                                <div class="h-full bg-gradient-to-r from-purple-500 via-pink-500 to-yellow-400 retention-bar"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Pro Editor & Quality Controls Below Each Short -->
+                    <div class="bg-[#070a12] border border-gray-800/90 rounded-xl p-2.5 space-y-2.5">
+                        
+                        <!-- Per-Card Instant Video Quality Selector (Default 1080p) -->
+                        <div class="flex items-center justify-between gap-2 bg-[#111827] px-2.5 py-1.5 rounded-lg border border-amber-500/40">
+                            <span class="text-[10px] text-gray-200 font-bold">
+                                <i class="fa-solid fa-tv text-amber-400 mr-1"></i> Video Quality:
+                            </span>
+                            <select 
+                                id="quality-${item.num}" 
+                                data-clip-num="${item.num}"
+                                onchange="switchCardQualityLive(${item.num}, this.value)" 
+                                class="card-quality-select bg-[#070a12] text-amber-300 border border-amber-500/50 rounded px-2 py-0.5 text-[11px] font-extrabold focus:outline-none cursor-pointer"
+                            >
+                                <option value="2160p" ${selectedQuality === '2160p' ? 'selected' : ''}>4K Ultra HD (3840×2160)</option>
+                                <option value="1440p" ${selectedQuality === '1440p' ? 'selected' : ''}>2K QHD (2560×1440)</option>
+                                <option value="1080p" ${selectedQuality === '1080p' ? 'selected' : ''}>1080p Full HD (Default)</option>
+                                <option value="720p"  ${selectedQuality === '720p' ? 'selected' : ''}>720p HD (1280×720)</option>
+                                <option value="480p"  ${selectedQuality === '480p' ? 'selected' : ''}>480p Low Data</option>
+                            </select>
+                        </div>
+
+                        <!-- Ratio Mode Switcher -->
+                        <div class="flex items-center justify-between gap-1.5">
+                            <span class="text-[10px] text-gray-400 font-semibold">9:16 Frame:</span>
+                            <div class="flex gap-1">
+                                <button onclick="setRatioStyle(${item.num}, 'full')" id="btn-full-${item.num}" class="bg-purple-600 text-white text-[10px] font-bold px-2.5 py-1 rounded">
+                                    Full 9:16 Crop
+                                </button>
+                                <button onclick="setRatioStyle(${item.num}, 'blur')" id="btn-blur-${item.num}" class="bg-[#111827] text-gray-300 border border-gray-700 text-[10px] font-semibold px-2.5 py-1 rounded">
+                                    Pro Blur 9:16
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Editable Start / End Seconds -->
+                        <div class="grid grid-cols-3 gap-1.5 items-end">
+                            <div>
+                                <label class="text-[9px] text-gray-500 block">Start (s)</label>
+                                <input type="number" id="start-${item.num}" value="${startSec}" min="0" class="w-full bg-[#111827] text-white text-xs font-mono p-1.5 rounded border border-gray-700 text-center">
+                            </div>
+                            <div>
+                                <label class="text-[9px] text-gray-500 block">End (s)</label>
+                                <input type="number" id="end-${item.num}" value="${endSec}" min="5" class="w-full bg-[#111827] text-white text-xs font-mono p-1.5 rounded border border-gray-700 text-center">
+                            </div>
+                            <button onclick="updateSingleClip(${item.num})" class="bg-gray-800 hover:bg-gray-700 text-white text-[11px] font-semibold py-1.5 rounded border border-gray-700">
+                                <i class="fa-solid fa-rotate mr-0.5"></i> Cut
+                            </button>
+                        </div>
+
+                        <!-- Direct Quality-Matched Phone Download Button -->
+                        <button id="dl-btn-${item.num}" onclick="openDownloadModal(${item.num}, '${item.title}')" class="w-full bg-gradient-to-r from-purple-600 to-blue-600 hover:opacity-95 text-white font-bold text-xs py-2.5 rounded-lg transition shadow-md flex items-center justify-center gap-1.5">
+                            <i class="fa-solid fa-download"></i> Download in ${qInfo.shortTag}
+                        </button>
+                    </div>
+                `;
+
+                grid.appendChild(card);
+                // Initialize Super-Sampling stage math
+                setTimeout(() => applySuperSampleDimensions(item.num), 50);
+            });
+
+            // Auto-start Short #1 in Super-Sampled 1080p/4K so user sees live video immediately with 100% bandwidth
+            setTimeout(() => {
+                activateSuperSampledPlayer(1);
+            }, 300);
+
+            document.getElementById('shortsOutputSection').scrollIntoView({ behavior: 'smooth' });
+        }
+
+        // Launches Official YT.Player with Giant Super-Sampled Pixel Dimensions (e.g. 3840x2160 or 1920x1080)
+        // Pauses other players so 100% network bandwidth goes to this Short!
+        function activateSuperSampledPlayer(num) {
+            // Pause/Destroy other active players to prevent bandwidth splitting
+            Object.keys(ytPlayers).forEach(otherNum => {
+                if (parseInt(otherNum) !== num && ytPlayers[otherNum]) {
+                    try { ytPlayers[otherNum].destroy(); } catch (e) {}
+                    delete ytPlayers[otherNum];
+                    const otherPoster = document.getElementById(`poster-${otherNum}`);
+                    if (otherPoster) otherPoster.classList.remove('hidden');
+                    const otherStage = document.getElementById(`stage-${otherNum}`);
+                    if (otherStage) otherStage.innerHTML = `<div id="yt-mount-${otherNum}"></div>`;
+                }
+            });
+
+            const poster = document.getElementById(`poster-${num}`);
+            if (poster) poster.classList.add('hidden');
+
+            const qKey = document.getElementById(`quality-${num}`).value || "1080p";
+            const qInfo = qualityConfig[qKey] || qualityConfig["1080p"];
+            const s = parseInt(document.getElementById(`start-${num}`).value) || 0;
+            const e = parseInt(document.getElementById(`end-${num}`).value) || (s + 45);
+
+            // Destroy existing instance on this card if rebuilding at new resolution
+            if (ytPlayers[num]) {
+                try { ytPlayers[num].destroy(); } catch (err) {}
+                delete ytPlayers[num];
+                document.getElementById(`stage-${num}`).innerHTML = `<div id="yt-mount-${num}"></div>`;
+            }
+
+            // Set Giant Super-Sampled Dimensions BEFORE mounting player
+            applySuperSampleDimensions(num);
+
+            if (window.YT && window.YT.Player) {
+                ytPlayers[num] = new YT.Player(`yt-mount-${num}`, {
+                    width: qInfo.renderW,
+                    height: qInfo.renderH,
+                    videoId: activeVideoId,
+                    playerVars: {
+                        autoplay: 1,
+                        start: s,
+                        end: e,
+                        vq: qInfo.vq,
+                        rel: 0,
+                        modestbranding: 1,
+                        playsinline: 1
+                    },
+                    events: {
+                        onReady: function(event) {
+                            applySuperSampleDimensions(num);
+                            event.target.setPlaybackQuality(qInfo.vq);
+                            if (event.target.setPlaybackQualityRange) {
+                                event.target.setPlaybackQualityRange(qInfo.vq, qInfo.vq);
+                            }
+                            event.target.playVideo();
+                        },
+                        onStateChange: function(event) {
+                            // Force quality lock on BUFFERING (3) and PLAYING (1)
+                            if (event.data === YT.PlayerState.BUFFERING || event.data === YT.PlayerState.PLAYING) {
+                                if (event.target.setPlaybackQualityRange) {
+                                    event.target.setPlaybackQualityRange(qInfo.vq, qInfo.vq);
+                                }
+                                event.target.setPlaybackQuality(qInfo.vq);
+                            }
+                        }
+                    }
+                });
+            } else {
+                // Fallback direct giant IFrame if YT script is still loading
+                document.getElementById(`stage-${num}`).innerHTML = `
+                    <iframe 
+                        width="${qInfo.renderW}" 
+                        height="${qInfo.renderH}" 
+                        style="width:${qInfo.renderW}px; height:${qInfo.renderH}px; border:0;"
+                        src="https://www.youtube.com/embed/${activeVideoId}?start=${s}&end=${e}&vq=${qInfo.vq}&autoplay=1&rel=0&modestbranding=1&playsinline=1" 
+                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
+                        allowfullscreen>
+                    </iframe>
+                `;
+                applySuperSampleDimensions(num);
+            }
+        }
+
+        // Triggered when user switches 480p / 720p / 1080p / 2K / 4K on a card
+        function switchCardQualityLive(num, qKey) {
+            const qInfo = qualityConfig[qKey] || qualityConfig["1080p"];
+
+            // 1. Update Badges, Resolution Meter, and Download Button
+            document.getElementById(`q-badge-${num}`).innerText = qInfo.shortTag;
+            document.getElementById(`player-q-pill-${num}`).innerText = qInfo.shortTag;
+            document.getElementById(`res-meter-${num}`).innerText = qInfo.resBadge;
+            document.getElementById(`poster-q-label-${num}`).innerText = qInfo.label;
+            document.getElementById(`dl-btn-${num}`).innerHTML = `<i class="fa-solid fa-download"></i> Download in ${qInfo.shortTag}`;
+
+            // 2. Apply Optical Contrast/Sharpness Overlay Class
+            const optLayer = document.getElementById(`opt-layer-${num}`);
+            optLayer.className = `optical-enhancer ${qInfo.optClass}`;
+
+            // 3. Resize Super-Sampled Viewport (e.g. to 3840x2160 for 4K) & Re-lock Stream Quality
+            activateSuperSampledPlayer(num);
+
+            // 4. Show Live HUD Confirmation Toast
+            const toast = document.getElementById(`hud-toast-${num}`);
+            document.getElementById(`hud-title-${num}`).innerText = `${qInfo.label.toUpperCase()} LOCKED`;
+            document.getElementById(`hud-sub-${num}`).innerText = `Viewport: ${qInfo.renderW} × ${qInfo.renderH} px`;
+            toast.classList.remove("hidden");
+            setTimeout(() => {
+                toast.classList.add("hidden");
+            }, 2000);
+        }
+
+        function setRatioStyle(num, style) {
+            cardModes[num] = style;
+            const btnFull = document.getElementById(`btn-full-${num}`);
+            const btnBlur = document.getElementById(`btn-blur-${num}`);
+            const poster = document.getElementById(`poster-${num}`);
+
+            if (style === 'full') {
+                btnFull.className = "bg-purple-600 text-white text-[10px] font-bold px-2.5 py-1 rounded";
+                btnBlur.className = "bg-[#111827] text-gray-300 border border-gray-700 text-[10px] font-semibold px-2.5 py-1 rounded";
+                if (poster) poster.classList.add('mode-full-bg');
+            } else {
+                btnBlur.className = "bg-purple-600 text-white text-[10px] font-bold px-2.5 py-1 rounded";
+                btnFull.className = "bg-[#111827] text-gray-300 border border-gray-700 text-[10px] font-semibold px-2.5 py-1 rounded";
+                if (poster) poster.classList.remove('mode-full-bg');
+            }
+
+            applySuperSampleDimensions(num);
+        }
+
+        function updateSingleClip(num) {
+            let s = parseInt(document.getElementById(`start-${num}`).value) || 0;
+            let e = parseInt(document.getElementById(`end-${num}`).value) || (s + 30);
+
+            if (e <= s) {
+                e = s + 20;
+                document.getElementById(`end-${num}`).value = e;
+            }
+
+            document.getElementById(`time-label-${num}`).innerText = `${formatMMSS(s)} - ${formatMMSS(e)}`;
+            activateSuperSampledPlayer(num);
+        }
+
+        function openDownloadModal(num, title) {
+            activeModalClipNum = num;
+            const s = document.getElementById(`start-${num}`).value;
+            const e = document.getElementById(`end-${num}`).value;
+            const cardQuality = document.getElementById(`quality-${num}`).value || "1080p";
+
+            activeClipLink = `https://youtu.be/${activeVideoId}?t=${s}`;
+            navigator.clipboard.writeText(activeClipLink);
+
+            document.getElementById('modalClipName').innerText = `Short #${num} (${title})`;
+            document.getElementById('modalClipTime').innerText = `${formatMMSS(s)} to ${formatMMSS(e)}`;
+            document.getElementById('modalQualitySelect').value = cardQuality;
+
+            syncModalQuality();
+            document.getElementById('downloadModal').classList.remove('hidden');
+        }
+
+        function syncModalQuality() {
+            const chosenQ = document.getElementById('modalQualitySelect').value || "1080p";
+            const qInfo = qualityConfig[chosenQ];
+
+            const cardSelect = document.getElementById(`quality-${activeModalClipNum}`);
+            if (cardSelect && cardSelect.value !== chosenQ) {
+                cardSelect.value = chosenQ;
+                switchCardQualityLive(activeModalClipNum, chosenQ);
+            }
+
+            document.getElementById('modalBitrateLabel').innerText = qInfo.resBadge;
+
+            const fullYtUrl = encodeURIComponent(`https://www.youtube.com/watch?v=${activeVideoId}`);
+            const directApiUrl = `https://loader.to/api/button/?url=${fullYtUrl}&f=${qInfo.dlCode}&color=8b5cf6`;
+
+            document.getElementById('liveDownloadWidget').src = directApiUrl;
+
+            const dlBtn1 = document.getElementById('dlQualityServer1');
+            dlBtn1.innerHTML = `<i class="fa-solid fa-download mr-1"></i> Instant Mobile Download (${qInfo.label})`;
+            dlBtn1.href = directApiUrl;
+        }
+
+        function closeDownloadModal() {
+            document.getElementById('downloadModal').classList.add('hidden');
+            document.getElementById('liveDownloadWidget').src = "";
+        }
+
+        function copyModalLink() {
+            navigator.clipboard.writeText(activeClipLink);
+            alert("Timestamped Clip Link Copied: " + activeClipLink);
+        }
+
+        window.addEventListener('resize', () => {
+            Object.keys(cardModes).forEach(num => applySuperSampleDimensions(parseInt(num)));
+        });
+    </script>
+</body>
+</html>
